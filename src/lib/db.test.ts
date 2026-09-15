@@ -15,6 +15,7 @@ import {
   getAiOptimizationHistory, saveAiOptimizationSearch, getAiOptimizationResults, type AiOptimizationEntry,
   getWebMentionsHistory, saveWebMentionsSearch, getWebMentionsItems, getWebMentionsSummary, type WebMentionsEntry,
   getSerpHistory, saveSerpSearch,
+  getSpendByTool, getSpendByDay, getFirstSpendTs,
 } from './db';
 
 afterAll(() => {
@@ -119,5 +120,41 @@ describe('SERP search cost', () => {
   it('keeps an unknown cost as undefined rather than zero', () => {
     saveSerpSearch({ ...base, id: 'test-serp-no-cost' }, [{ type: 'organic' }]);
     expect(getSerpHistory().find((h) => h.id === 'test-serp-no-cost')?.cost).toBeUndefined();
+  });
+});
+
+describe('spending aggregates', () => {
+  const day = (d: number, h = 12) => new Date(2030, 0, d, h).getTime();
+  const serp = { keyword: 'k', location: 'France', language: 'French', device: 'desktop', depth: 10, count: 1 };
+
+  beforeAll(() => {
+    saveSerpSearch({ ...serp, id: 'spend-1', ts: day(1), cost: 0.002 }, [{}]);
+    saveSerpSearch({ ...serp, id: 'spend-2', ts: day(2), cost: 0.004 }, [{}]);
+    saveSerpSearch({ ...serp, id: 'spend-3', ts: day(2, 18) }, [{}]); // unknown cost
+    saveSerpSearch({ ...serp, id: 'spend-out', ts: day(10), cost: 1 }, [{}]); // outside the range
+  });
+
+  const from = new Date(2030, 0, 1).getTime();
+  const to = new Date(2030, 0, 3).getTime();
+
+  it('sums known costs per tool within the range and counts unknown-cost calls separately', () => {
+    const serpSpend = getSpendByTool(from, to).find((t) => t.tool === 'SERP Checker');
+    expect(serpSpend).toMatchObject({ calls: 3, unknownCalls: 1 });
+    expect(serpSpend!.knownCost).toBeCloseTo(0.006);
+    expect(serpSpend!.avgKnownCost).not.toBeNull();
+  });
+
+  it('groups calls by local day', () => {
+    const days = getSpendByDay(from, to);
+    expect(days.map((d) => [d.day, d.calls, d.unknownCalls])).toEqual([['2030-01-01', 1, 0], ['2030-01-02', 2, 1]]);
+    expect(days[1].knownCost).toBeCloseTo(0.004);
+  });
+
+  it('omits tools with no calls in the range', () => {
+    expect(getSpendByTool(new Date(2031, 0, 1).getTime(), new Date(2031, 0, 2).getTime())).toEqual([]);
+  });
+
+  it('finds the oldest recorded call', () => {
+    expect(getFirstSpendTs()).not.toBeNull();
   });
 });

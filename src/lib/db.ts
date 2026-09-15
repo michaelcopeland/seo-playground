@@ -1998,3 +1998,134 @@ export function getWebMentionsSummary<T>(id: string): T | null {
   const row = getDb().prepare('SELECT summary FROM web_mentions_searches WHERE id = ?').get(id) as { summary: string } | undefined;
   if (!row) return null; try { return JSON.parse(row.summary) as T; } catch { return null; }
 }
+
+// --- Spending (aggregates the `cost` recorded by every tool) ---
+
+// Every table that records what a DataForSEO call cost, mapped to the tool the user sees.
+// Several tables can belong to one tool; they're merged by `tool`. Tables that no longer
+// have a page (e.g. Reddit Mentions) are kept so past spend stays visible on older DBs.
+export const SPEND_SOURCES: Array<{ table: string; tool: string; href: string | null; tsColumn?: string }> = [
+  { table: 'rank_checks', tool: 'Rank Tracker', href: '/dashboard/rank-tracker', tsColumn: 'checked_at' },
+  { table: 'ranked_kw_searches', tool: 'Ranked Keywords', href: '/dashboard/ranked-keywords' },
+  { table: 'kw_overview_searches', tool: 'Keyword Overview', href: '/dashboard/keyword-overview' },
+  { table: 'competitors_searches', tool: 'Competitors', href: '/dashboard/competitors' },
+  { table: 'domain_intersection_searches', tool: 'Domain Intersection', href: '/dashboard/domain-intersection' },
+  { table: 'hist_rank_searches', tool: 'Historical Rank', href: '/dashboard/historical-rank' },
+  { table: 'related_kw_searches', tool: 'Related Keywords', href: '/dashboard/related-keywords' },
+  { table: 'top_searches_searches', tool: 'Top Searches', href: '/dashboard/top-searches' },
+  { table: 'domain_tech_searches', tool: 'Technologies', href: '/dashboard/domain-analytics/technologies' },
+  { table: 'domain_find_searches', tool: 'Technologies', href: '/dashboard/domain-analytics/technologies' },
+  { table: 'domain_whois_searches', tool: 'Whois', href: '/dashboard/domain-analytics/whois' },
+  { table: 'domain_categories_searches', tool: 'Categories', href: '/dashboard/domain-analytics/categories' },
+  { table: 'keyword_ideas_searches', tool: 'Keyword Ideas', href: '/dashboard/keyword-ideas' },
+  { table: 'search_intent_searches', tool: 'Search Intent', href: '/dashboard/search-intent' },
+  { table: 'page_intersection_searches', tool: 'Page Intersection (Labs)', href: '/dashboard/page-intersection' },
+  { table: 'subdomains_searches', tool: 'Subdomains', href: '/dashboard/subdomains' },
+  { table: 'traffic_estimation_searches', tool: 'Traffic Estimation', href: '/dashboard/traffic-estimation' },
+  { table: 'backlinks_searches', tool: 'Backlinks', href: '/dashboard/backlinks' },
+  { table: 'ref_domains_searches', tool: 'Referring Domains', href: '/dashboard/backlinks/referring-domains' },
+  { table: 'anchors_searches', tool: 'Anchors', href: '/dashboard/backlinks/anchors' },
+  { table: 'bl_ref_networks', tool: 'Referring Networks', href: '/dashboard/backlinks/referring-networks' },
+  { table: 'bl_page_intersection', tool: 'Backlinks Page Intersection', href: '/dashboard/backlinks/page-intersection' },
+  { table: 'bl_domain_intersection', tool: 'Backlinks Domain Intersection', href: '/dashboard/backlinks/domain-intersection' },
+  { table: 'bl_history', tool: 'Backlinks History', href: '/dashboard/backlinks/history' },
+  { table: 'bl_bulk_backlinks', tool: 'Bulk Backlinks', href: '/dashboard/backlinks/bulk-backlinks' },
+  { table: 'bl_bulk_ref_domains', tool: 'Bulk Ref. Domains', href: '/dashboard/backlinks/bulk-referring-domains' },
+  { table: 'serp_searches', tool: 'SERP Checker', href: '/dashboard/serp' },
+  { table: 'lf_searches', tool: 'Local Finder', href: '/dashboard/local-finder' },
+  { table: 'grid_searches', tool: 'Geo-Grid Ranking', href: '/dashboard/geo-grid' },
+  { table: 'ai_optimization_searches', tool: 'AI Optimization', href: '/dashboard/ai-optimization' },
+  { table: 'ai_visibility_searches', tool: 'AI Visibility', href: '/dashboard/ai-visibility' },
+  { table: 'llm_response_searches', tool: 'AI Prompt Test', href: '/dashboard/llm-responses' },
+  { table: 'ai_kwdata_searches', tool: 'AI Keyword Data', href: '/dashboard/ai-keyword-data' },
+  { table: 'fan_out_searches', tool: 'Query Fan-Out', href: '/dashboard/query-fan-out' },
+  { table: 'reviews_tasks', tool: 'Google Reviews', href: '/dashboard/google-reviews' },
+  { table: 'web_mentions_searches', tool: 'Web Mentions', href: '/dashboard/web-mentions' },
+  { table: 'kd_searches', tool: 'Keyword Data', href: '/dashboard/keyword-data' },
+  { table: 'kw_difficulty_searches', tool: 'Keyword Difficulty', href: '/dashboard/keyword-difficulty' },
+  { table: 'instant_page_searches', tool: 'On-Page Instant Pages', href: '/dashboard/on-page/instant-pages' },
+  { table: 'onpage_tasks', tool: 'Microdata', href: '/dashboard/on-page/microdata' },
+  { table: 'site_audit_tasks', tool: 'Site Audit', href: '/dashboard/on-page/site-audit' },
+  { table: 'reddit_searches', tool: 'Reddit Mentions (removed)', href: null },
+];
+
+export interface ToolSpend {
+  tool: string;
+  href: string | null;
+  calls: number;
+  /** Sum of the costs DataForSEO reported. Calls with an unknown cost add nothing here. */
+  knownCost: number;
+  unknownCalls: number;
+  /** Average known cost per call for this tool across all time, used to estimate unknown calls. Null if never known. */
+  avgKnownCost: number | null;
+}
+
+export interface DailySpend {
+  /** Local calendar day, YYYY-MM-DD. */
+  day: string;
+  calls: number;
+  knownCost: number;
+  unknownCalls: number;
+}
+
+// Only tables that exist and carry a cost column (older DBs may lack some).
+function spendSources(db: Database.Database) {
+  return SPEND_SOURCES.filter((s) => {
+    const cols = db.prepare(`SELECT name FROM pragma_table_info(?)`).all(s.table) as Array<{ name: string }>;
+    const names = new Set(cols.map((c) => c.name));
+    return names.has('cost') && names.has(s.tsColumn ?? 'ts');
+  });
+}
+
+export function getSpendByTool(fromMs: number, toMs: number): ToolSpend[] {
+  const db = getDb();
+  const byTool = new Map<string, ToolSpend & { allKnownCost: number; allKnownCalls: number }>();
+  for (const s of spendSources(db)) {
+    const ts = s.tsColumn ?? 'ts';
+    const r = db.prepare(`
+      SELECT
+        SUM(CASE WHEN ${ts} >= @from AND ${ts} < @to THEN 1 ELSE 0 END) AS calls,
+        SUM(CASE WHEN ${ts} >= @from AND ${ts} < @to THEN COALESCE(cost, 0) ELSE 0 END) AS known_cost,
+        SUM(CASE WHEN ${ts} >= @from AND ${ts} < @to AND cost IS NULL THEN 1 ELSE 0 END) AS unknown_calls,
+        COALESCE(SUM(cost), 0) AS all_known_cost,
+        COUNT(cost) AS all_known_calls
+      FROM ${s.table}
+    `).get({ from: fromMs, to: toMs }) as { calls: number | null; known_cost: number | null; unknown_calls: number | null; all_known_cost: number; all_known_calls: number };
+    const acc = byTool.get(s.tool) ?? { tool: s.tool, href: s.href, calls: 0, knownCost: 0, unknownCalls: 0, avgKnownCost: null, allKnownCost: 0, allKnownCalls: 0 };
+    acc.calls += r.calls ?? 0;
+    acc.knownCost += r.known_cost ?? 0;
+    acc.unknownCalls += r.unknown_calls ?? 0;
+    acc.allKnownCost += r.all_known_cost;
+    acc.allKnownCalls += r.all_known_calls;
+    byTool.set(s.tool, acc);
+  }
+  return [...byTool.values()]
+    .filter((t) => t.calls > 0)
+    .map(({ allKnownCost, allKnownCalls, ...t }) => ({ ...t, avgKnownCost: allKnownCalls > 0 ? allKnownCost / allKnownCalls : null }))
+    .sort((a, b) => b.knownCost - a.knownCost || b.calls - a.calls);
+}
+
+export function getSpendByDay(fromMs: number, toMs: number): DailySpend[] {
+  const db = getDb();
+  const sources = spendSources(db);
+  if (sources.length === 0) return [];
+  const union = sources
+    .map((s) => `SELECT ${s.tsColumn ?? 'ts'} AS ts, cost FROM ${s.table} WHERE ${s.tsColumn ?? 'ts'} >= @from AND ${s.tsColumn ?? 'ts'} < @to`)
+    .join(' UNION ALL ');
+  const rows = db.prepare(`
+    SELECT date(ts / 1000, 'unixepoch', 'localtime') AS day, COUNT(*) AS calls,
+      COALESCE(SUM(cost), 0) AS known_cost, SUM(cost IS NULL) AS unknown_calls
+    FROM (${union}) GROUP BY day ORDER BY day
+  `).all({ from: fromMs, to: toMs }) as Array<{ day: string; calls: number; known_cost: number; unknown_calls: number }>;
+  return rows.map((r) => ({ day: r.day, calls: r.calls, knownCost: r.known_cost, unknownCalls: r.unknown_calls }));
+}
+
+/** Timestamp of the oldest recorded call across all tools, or null if nothing was ever recorded. */
+export function getFirstSpendTs(): number | null {
+  const db = getDb();
+  const sources = spendSources(db);
+  if (sources.length === 0) return null;
+  const union = sources.map((s) => `SELECT MIN(${s.tsColumn ?? 'ts'}) AS ts FROM ${s.table}`).join(' UNION ALL ');
+  const row = db.prepare(`SELECT MIN(ts) AS ts FROM (${union})`).get() as { ts: number | null };
+  return row.ts;
+}

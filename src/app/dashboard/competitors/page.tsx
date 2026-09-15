@@ -3,11 +3,12 @@ import {
   getCompetitorsHistory,
   saveCompetitorsSearch,
   getCompetitorsResults,
+  getSetting,
   type CompetitorsSearchEntry,
 } from '@/lib/db';
 import ExportCSVButton from '@/components/ExportCSVButton';
 import CopyMarkdownButton from '@/components/CopyMarkdownButton';
-import { LANGUAGES } from '@/lib/geo-options';
+import { LANGUAGES, toLabsCountry } from '@/lib/geo-options';
 import LocationPicker from '@/components/LocationPicker';
 import SearchForm from '@/components/SearchForm';
 import { stableSearchId } from '@/lib/dedupe';
@@ -80,8 +81,8 @@ export default async function CompetitorsPage({ searchParams }: { searchParams: 
   const historyId = params.history_id;
 
   const target = params.target?.trim() ?? '';
-  const location = params.location ?? 'France';
-  const language = params.language ?? 'French';
+  const location = params.location ?? toLabsCountry(getSetting('default_location') ?? 'France');
+  const language = params.language ?? getSetting('default_language') ?? 'French';
   const limit = Math.min(parseInt(params.limit ?? '20', 10) || 20, 100);
 
   let items: CompetitorItem[] = [];

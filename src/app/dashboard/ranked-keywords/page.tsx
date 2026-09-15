@@ -3,11 +3,12 @@ import {
   getRankedKwHistory,
   saveRankedKwSearch,
   getRankedKwResults,
+  getSetting,
   type RankedKwSearchEntry,
 } from '@/lib/db';
 import ExportCSVButton from '@/components/ExportCSVButton';
 import CopyMarkdownButton from '@/components/CopyMarkdownButton';
-import { LANGUAGES } from '@/lib/geo-options';
+import { LANGUAGES, toLabsCountry } from '@/lib/geo-options';
 import { stableSearchId } from '@/lib/dedupe';
 import { callDataForSeoFirst } from '@/lib/dataforseo';
 import LocationPicker from '@/components/LocationPicker';
@@ -116,8 +117,8 @@ export default async function RankedKeywordsPage({ searchParams }: { searchParam
   const historyId = params.history_id;
 
   const target = params.target?.trim() ?? '';
-  const location = params.location ?? 'France';
-  const language = params.language ?? 'French';
+  const location = params.location ?? toLabsCountry(getSetting('default_location') ?? 'France');
+  const language = params.language ?? getSetting('default_language') ?? 'French';
   const limit = Math.min(parseInt(params.limit ?? '100', 10) || 100, 1000);
   const orderBy = params.order_by ?? 'ranked_serp_element.serp_item.rank_group,asc';
   const maxPosition = params.max_position ? parseInt(params.max_position, 10) : null;

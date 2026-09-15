@@ -14,6 +14,7 @@ import {
   getCredentials, saveCredentials, clearCredentials,
   getAiOptimizationHistory, saveAiOptimizationSearch, getAiOptimizationResults, type AiOptimizationEntry,
   getWebMentionsHistory, saveWebMentionsSearch, getWebMentionsItems, getWebMentionsSummary, type WebMentionsEntry,
+  getSerpHistory, saveSerpSearch,
 } from './db';
 
 afterAll(() => {
@@ -103,5 +104,20 @@ describe('Web Mentions search cache (search + summary saved/read together)', () 
     expect(getWebMentionsItems('test-wm-1')).toEqual(items);
     expect(getWebMentionsSummary('test-wm-1')).toEqual(summary);
     expect(getWebMentionsHistory().find((h) => h.id === 'test-wm-1')).toMatchObject({ keyword: 'acme corp', totalCount: 2 });
+  });
+});
+
+// SERP searches used to drop the cost DataForSEO reports, leaving no way to reconcile spend (#9).
+describe('SERP search cost', () => {
+  const base = { ts: Date.now(), keyword: 'plombier paris', location: 'France', language: 'French', device: 'desktop', depth: 10, count: 1 };
+
+  it('persists the reported cost with the search', () => {
+    saveSerpSearch({ ...base, id: 'test-serp-cost', cost: 0.002 }, [{ type: 'organic' }]);
+    expect(getSerpHistory().find((h) => h.id === 'test-serp-cost')?.cost).toBe(0.002);
+  });
+
+  it('keeps an unknown cost as undefined rather than zero', () => {
+    saveSerpSearch({ ...base, id: 'test-serp-no-cost' }, [{ type: 'organic' }]);
+    expect(getSerpHistory().find((h) => h.id === 'test-serp-no-cost')?.cost).toBeUndefined();
   });
 });

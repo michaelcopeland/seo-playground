@@ -37,14 +37,14 @@ function extractDomain(url?: string): string {
 async function fetchSerp(
   keyword: string, location: string, language: string, device: string, depth: number,
   login: string, pass: string,
-): Promise<{ items: SerpItem[]; error?: string }> {
-  const { result, error } = await callDataForSeoFirst<{ items?: SerpItem[] }>(
+): Promise<{ items: SerpItem[]; cost?: number; error?: string }> {
+  const { result, cost, error } = await callDataForSeoFirst<{ items?: SerpItem[] }>(
     'serp/google/organic/live/advanced',
     { keyword, location_name: location, language_name: language, device, depth },
     { login, pass },
   );
-  if (error) return { items: [], error };
-  return { items: result?.items?.filter((i) => i.type === 'organic') ?? [] };
+  if (error) return { items: [], cost, error };
+  return { items: result?.items?.filter((i) => i.type === 'organic') ?? [], cost };
 }
 
 function formatDate(ts: number) {
@@ -67,6 +67,7 @@ export default async function SerpPage({ searchParams }: { searchParams: Promise
   let results: SerpItem[] = [];
   let error: string | null = null;
   let isFromHistory = false;
+  let cost: number | undefined;
   let activeEntry: SerpHistoryEntry | null = null;
 
   // Load from history
@@ -76,6 +77,7 @@ export default async function SerpPage({ searchParams }: { searchParams: Promise
       results = saved;
       isFromHistory = true;
       activeEntry = history.find((e) => e.id === historyId) ?? null;
+      cost = activeEntry?.cost;
     } else {
       error = 'This search is no longer available.';
     }
@@ -90,12 +92,14 @@ export default async function SerpPage({ searchParams }: { searchParams: Promise
       results = cached;
       isFromHistory = true;
       activeEntry = history.find((e) => e.id === dedupeId) ?? null;
+      cost = activeEntry?.cost;
     } else if (!creds) {
       error = 'DataForSEO credentials missing. Configure them in Settings.';
     } else {
       try {
         const res = await fetchSerp(keyword, location, language, device, depth, creds.login, creds.pass);
         results = res.items;
+        cost = res.cost;
         error = res.error ?? null;
         if (results.length > 0) {
           const hits: TargetHit[] = targetDomains
@@ -117,6 +121,7 @@ export default async function SerpPage({ searchParams }: { searchParams: Promise
             device,
             depth,
             count: results.length,
+            cost: res.cost,
             targetHits: hits.length > 0 ? hits : undefined,
           };
           saveSerpSearch(entry, results);
@@ -219,7 +224,10 @@ export default async function SerpPage({ searchParams }: { searchParams: Promise
                     <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 bg-blue-50 dark:bg-blue-950 px-2 py-0.5 rounded-md">History</span>
                   )}
                 </div>
-                <span className="text-xs font-black text-slate-400">{results.length} result{results.length !== 1 ? 's' : ''}</span>
+                <div className="flex items-center gap-3">
+                  {cost !== undefined && <span className="text-[10px] font-mono text-slate-400">cost: ${cost.toFixed(4)}</span>}
+                  <span className="text-xs font-black text-slate-400">{results.length} result{results.length !== 1 ? 's' : ''}</span>
+                </div>
               </div>
 
               {results.length === 0 ? (
@@ -313,7 +321,7 @@ export default async function SerpPage({ searchParams }: { searchParams: Promise
                         <p className={`text-xs font-medium truncate ${isActive ? 'text-blue-700 dark:text-blue-400' : 'text-slate-800 dark:text-slate-200'}`}>{entry.keyword}</p>
                         <span className="shrink-0 text-[10px] text-slate-400">{formatDate(entry.ts)}</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{entry.location} · {entry.count} results</p>
+                      <p className="text-[10px] text-slate-400 truncate mt-0.5">{entry.location} · {entry.count} results{entry.cost !== undefined ? ` · $${entry.cost.toFixed(4)}` : ''}</p>
                       {entry.targetHits && entry.targetHits.length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-1.5">
                           {entry.targetHits.map((h) => (

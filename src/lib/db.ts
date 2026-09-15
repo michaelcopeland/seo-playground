@@ -33,7 +33,8 @@ function initSchema(db: Database.Database) {
       depth INTEGER NOT NULL,
       result_count INTEGER NOT NULL,
       items TEXT NOT NULL,
-      target_hits TEXT
+      target_hits TEXT,
+      cost REAL
     );
 
     CREATE TABLE IF NOT EXISTS kd_searches (
@@ -509,6 +510,7 @@ function initSchema(db: Database.Database) {
   // "column already exists" error is swallowed; anything else (a real syntax error, a
   // locked/corrupt DB) rethrows instead of failing silently.
   addColumnIfMissing(db, 'serp_searches', 'ADD COLUMN target_hits TEXT');
+  addColumnIfMissing(db, 'serp_searches', 'ADD COLUMN cost REAL');
   addColumnIfMissing(db, 'backlinks_searches', 'ADD COLUMN links TEXT');
   addColumnIfMissing(db, 'backlinks_searches', 'ADD COLUMN links_total INTEGER');
   addColumnIfMissing(db, 'grid_searches', `ADD COLUMN status TEXT NOT NULL DEFAULT 'done'`);
@@ -716,24 +718,26 @@ export interface SerpHistoryEntry {
   device: string;
   depth: number;
   count: number;
+  cost?: number;
   targetHits?: TargetHit[];
 }
 
 export function getSerpHistory(): SerpHistoryEntry[] {
   const rows = getDb()
-    .prepare('SELECT id, ts, keyword, location, language, device, depth, result_count, target_hits FROM serp_searches ORDER BY ts DESC LIMIT 30')
-    .all() as Array<{ id: string; ts: number; keyword: string; location: string; language: string; device: string; depth: number; result_count: number; target_hits: string | null }>;
+    .prepare('SELECT id, ts, keyword, location, language, device, depth, result_count, target_hits, cost FROM serp_searches ORDER BY ts DESC LIMIT 30')
+    .all() as Array<{ id: string; ts: number; keyword: string; location: string; language: string; device: string; depth: number; result_count: number; target_hits: string | null; cost: number | null }>;
   return rows.map((r) => ({
     ...r,
     count: r.result_count,
+    cost: r.cost ?? undefined,
     targetHits: r.target_hits ? JSON.parse(r.target_hits) : undefined,
   }));
 }
 
 export function saveSerpSearch<T>(entry: SerpHistoryEntry, items: T[]): void {
   getDb()
-    .prepare('INSERT OR REPLACE INTO serp_searches (id, ts, keyword, location, language, device, depth, result_count, items, target_hits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(entry.id, entry.ts, entry.keyword, entry.location, entry.language, entry.device, entry.depth, entry.count, JSON.stringify(items), entry.targetHits ? JSON.stringify(entry.targetHits) : null);
+    .prepare('INSERT OR REPLACE INTO serp_searches (id, ts, keyword, location, language, device, depth, result_count, items, target_hits, cost) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(entry.id, entry.ts, entry.keyword, entry.location, entry.language, entry.device, entry.depth, entry.count, JSON.stringify(items), entry.targetHits ? JSON.stringify(entry.targetHits) : null, entry.cost ?? null);
 }
 
 export function getSerpResults<T>(id: string): T[] | null {

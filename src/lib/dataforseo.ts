@@ -52,13 +52,16 @@ export async function callDataForSeo<T>(
 
   if (!res.ok) return { error: `API error ${res.status}: ${res.statusText}` };
 
-  let data: { tasks?: Array<{ status_code?: number; status_message?: string; cost?: number; result?: T[] }> };
+  let data: { status_code?: number; status_message?: string; tasks?: Array<{ status_code?: number; status_message?: string; cost?: number; result?: T[] }> | null };
   try {
     data = await res.json();
   } catch {
     return { error: 'Invalid API response (not JSON).' };
   }
 
+  // Request-level failures (e.g. 50304 "function temporarily unavailable") come back with `tasks: null`
+  // and the reason only in the top-level status, so surface that instead of a generic message.
+  if (data?.status_code && data.status_code !== 20000) return { error: `DataForSEO: ${data.status_message}` };
   const task = data?.tasks?.[0];
   if (!task) return { error: 'Empty API response.' };
   if (task.status_code && task.status_code !== 20000) return { error: `DataForSEO: ${task.status_message}` };

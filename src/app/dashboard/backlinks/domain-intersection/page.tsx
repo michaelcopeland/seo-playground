@@ -12,19 +12,34 @@ interface DomIntItem {
   backlinks_from_target1?: number;
   backlinks_from_target2?: number;
   first_seen?: string;
-  last_seen?: string;
 }
+
+interface DomIntTargetData { target?: string; rank?: number; backlinks?: number; first_seen?: string | null; }
+interface DomIntApiItem { domain_intersection?: Record<string, DomIntTargetData | undefined>; }
 
 interface SearchParams { target1?: string; target2?: string; history_id?: string; }
 
 async function fetchDomInt(target1: string, target2: string, login: string, pass: string): Promise<{ items: DomIntItem[]; cost?: number; error?: string }> {
-  const { result, cost, error } = await callDataForSeoFirst<{ items?: DomIntItem[] }>(
+  const { result, cost, error } = await callDataForSeoFirst<{ items?: DomIntApiItem[] }>(
     'backlinks/domain_intersection/live',
-    { target1, target2, limit: 500, order_by: ['domain_from_rank,desc'] },
+    { targets: { '1': target1, '2': target2 }, limit: 500, order_by: ['1.rank,desc'] },
     { login, pass },
   );
   if (error) return { items: [], error };
-  return { items: result?.items ?? [], cost };
+  // Each item holds per-target stats for the same referring domain, keyed by target index
+  const items = (result?.items ?? []).map((item): DomIntItem => {
+    const d1 = item.domain_intersection?.['1'];
+    const d2 = item.domain_intersection?.['2'];
+    const firstSeen = [d1?.first_seen, d2?.first_seen].filter((s): s is string => !!s).sort()[0];
+    return {
+      domain_from: d1?.target ?? d2?.target,
+      domain_from_rank: d1?.rank ?? d2?.rank,
+      backlinks_from_target1: d1?.backlinks,
+      backlinks_from_target2: d2?.backlinks,
+      first_seen: firstSeen,
+    };
+  });
+  return { items, cost };
 }
 
 function formatDate(ts: number) { return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }
@@ -73,7 +88,6 @@ export default async function DomainIntersectionPage({ searchParams }: { searchP
     backlinks_to_target1: item.backlinks_from_target1 ?? '',
     backlinks_to_target2: item.backlinks_from_target2 ?? '',
     first_seen: item.first_seen ?? '',
-    last_seen: item.last_seen ?? '',
   }));
 
   return (
@@ -118,8 +132,8 @@ export default async function DomainIntersectionPage({ searchParams }: { searchP
             </div>
             <div className="flex items-center gap-3">
               {cost !== undefined && <span className="text-[10px] font-mono text-slate-400">cost: ${cost.toFixed(4)}</span>}
-              {items.length > 0 && <CopyMarkdownButton data={csvData} columns={[{key:'domain_from',label:'Linking Domain'},{key:'domain_from_rank',label:'DR'},{key:'backlinks_to_target1',label:`BL → ${t1}`},{key:'backlinks_to_target2',label:`BL → ${t2}`},{key:'first_seen',label:'First Seen'},{key:'last_seen',label:'Last Seen'}]} />}
-              {items.length > 0 && <ExportCSVButton data={csvData} filename={`domain-intersection-${t1}-${t2}.csv`} columns={[{key:'domain_from',label:'Linking Domain'},{key:'domain_from_rank',label:'DR'},{key:'backlinks_to_target1',label:`BL → ${t1}`},{key:'backlinks_to_target2',label:`BL → ${t2}`},{key:'first_seen',label:'First Seen'},{key:'last_seen',label:'Last Seen'}]} />}
+              {items.length > 0 && <CopyMarkdownButton data={csvData} columns={[{key:'domain_from',label:'Linking Domain'},{key:'domain_from_rank',label:'DR'},{key:'backlinks_to_target1',label:`BL → ${t1}`},{key:'backlinks_to_target2',label:`BL → ${t2}`},{key:'first_seen',label:'First Seen'}]} />}
+              {items.length > 0 && <ExportCSVButton data={csvData} filename={`domain-intersection-${t1}-${t2}.csv`} columns={[{key:'domain_from',label:'Linking Domain'},{key:'domain_from_rank',label:'DR'},{key:'backlinks_to_target1',label:`BL → ${t1}`},{key:'backlinks_to_target2',label:`BL → ${t2}`},{key:'first_seen',label:'First Seen'}]} />}
             </div>
           </div>
           {items.length === 0 ? (

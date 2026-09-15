@@ -118,6 +118,17 @@ describe('callDataForSeo', () => {
     const res = await callDataForSeo('some/endpoint/live', {}, creds);
     expect(res.error).toBe('Empty API response.');
   });
+
+  it('surfaces the top-level status message when the whole request is rejected', async () => {
+    mockFetchOnce(() => new Response(JSON.stringify({
+      status_code: 50304,
+      status_message: 'This function temporarily unavailable. Please contact support for more information.',
+      tasks: null,
+    }), { status: 200 }));
+
+    const res = await callDataForSeo('some/endpoint/live', {}, creds);
+    expect(res.error).toBe('DataForSEO: This function temporarily unavailable. Please contact support for more information.');
+  });
 });
 
 describe('callDataForSeoFirst', () => {

@@ -8,14 +8,29 @@ import PageIntersectionTable, { type PageIntItem } from './PageIntersectionTable
 
 interface SearchParams { targets?: string; history_id?: string; }
 
+interface PageIntBacklink { url_from?: string; domain_from?: string; url_to?: string; page_from_rank?: number; backlink_spam_score?: number; }
+interface PageIntApiItem { page_intersection?: Record<string, PageIntBacklink[] | null | undefined>; }
+
 async function fetchPageInt(targets: string[], login: string, pass: string): Promise<{ items: PageIntItem[]; cost?: number; error?: string }> {
-  const { result, cost, error } = await callDataForSeoFirst<{ items?: PageIntItem[] }>(
+  const { result, cost, error } = await callDataForSeoFirst<{ items?: PageIntApiItem[] }>(
     'backlinks/page_intersection/live',
-    { targets: targets.map((t) => ({ url: t, type: 'url' })), limit: 500, order_by: ['page_from_rank,desc'] },
+    { targets: Object.fromEntries(targets.map((t, i) => [String(i + 1), t])), limit: 500, order_by: ['1.page_from_rank,desc'] },
     { login, pass },
   );
   if (error) return { items: [], error };
-  return { items: result?.items ?? [], cost };
+  // Each item is one referring page; page_intersection lists its backlinks per target index
+  const items = (result?.items ?? []).map((item): PageIntItem => {
+    const perTarget = Object.values(item.page_intersection ?? {}).filter((bls): bls is PageIntBacklink[] => !!bls?.length);
+    const first = perTarget[0]?.[0];
+    return {
+      url_from: first?.url_from,
+      domain_from: first?.domain_from,
+      page_from_rank: first?.page_from_rank,
+      backlinks_spam_score: first?.backlink_spam_score,
+      url_to: perTarget.map((bls) => bls[0].url_to ?? ''),
+    };
+  });
+  return { items, cost };
 }
 
 function formatDate(ts: number) { return new Date(ts).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }); }

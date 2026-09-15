@@ -9,10 +9,9 @@ interface DomIntItem {
   backlinks_from_target1?: number;
   backlinks_from_target2?: number;
   first_seen?: string;
-  last_seen?: string;
 }
 
-type SortKey = 'domain_from' | 'domain_from_rank' | 'backlinks_from_target1' | 'backlinks_from_target2' | 'last_seen';
+type SortKey = 'domain_from' | 'domain_from_rank' | 'backlinks_from_target1' | 'backlinks_from_target2' | 'first_seen';
 type SortDir = 'asc' | 'desc';
 
 function RankBadge({ rank }: { rank?: number }) {
@@ -29,7 +28,7 @@ function sortValue(item: DomIntItem, key: SortKey): number | string {
     case 'domain_from_rank': return item.domain_from_rank ?? -1;
     case 'backlinks_from_target1': return item.backlinks_from_target1 ?? -1;
     case 'backlinks_from_target2': return item.backlinks_from_target2 ?? -1;
-    case 'last_seen': return item.last_seen ?? '';
+    case 'first_seen': return item.first_seen ?? '';
   }
 }
 
@@ -80,7 +79,7 @@ export default function DomainIntersectionTable({ items, t1, t2 }: { items: DomI
             <Header label="DR" sortK="domain_from_rank" align="center" />
             <Header label={`→ ${t1 || 'Target 1'}`} sortK="backlinks_from_target1" align="right" className="text-blue-600" />
             <Header label={`→ ${t2 || 'Target 2'}`} sortK="backlinks_from_target2" align="right" className="text-violet-600" />
-            <Header label="Last seen" sortK="last_seen" align="right" className="hidden lg:table-cell text-slate-400" />
+            <Header label="First seen" sortK="first_seen" align="right" className="hidden lg:table-cell text-slate-400" />
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
@@ -90,7 +89,7 @@ export default function DomainIntersectionTable({ items, t1, t2 }: { items: DomI
               <td className="px-4 py-3 text-center"><RankBadge rank={item.domain_from_rank} /></td>
               <td className="px-4 py-3 text-right font-mono text-blue-600 tabular-nums font-bold">{fmt(item.backlinks_from_target1)}</td>
               <td className="px-4 py-3 text-right font-mono text-violet-600 tabular-nums font-bold">{fmt(item.backlinks_from_target2)}</td>
-              <td className="px-4 py-3 text-right text-slate-400 text-[11px] hidden lg:table-cell">{item.last_seen?.slice(0, 10) ?? '—'}</td>
+              <td className="px-4 py-3 text-right text-slate-400 text-[11px] hidden lg:table-cell">{item.first_seen?.slice(0, 10) ?? '—'}</td>
             </tr>
           ))}
         </tbody>

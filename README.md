@@ -53,7 +53,6 @@ If you find this useful, consider supporting the project:
 - **Google Reviews** — Fetch and analyze Google Business reviews: rating distribution, monthly chart, and rating goal calculator
 - **AI Optimization** — Visibility in AI-generated answers
 - **AI Visibility** — Target overview (mentions, AI search volume, source/platform breakdown) or topic leaderboard (top mentioned domains and brands) via DataForSEO LLM Mentions
-- **Reddit Mentions** — Discover Reddit threads linking to or discussing your URLs
 - **Top Searches** — Local search trends
 - **Settings** — Store your DataForSEO credentials and defaults locally
 
@@ -128,6 +127,7 @@ Search history and results are cached locally in `seo-playground.db`. The databa
 
 Full detailed history: [CHANGELOG.md](CHANGELOG.md).
 
+- **2026-09-15** — Fixed Domain Intersection and Page Intersection (both failed with `Invalid Field: 'targets'`): requests now use DataForSEO's `targets: {"1": …, "2": …}` format and the nested per-target response is mapped correctly. API errors that reject the whole request now show DataForSEO's real message instead of "Empty API response". Removed the Reddit Mentions page: DataForSEO has disabled that endpoint (`50304 — function temporarily unavailable`).
 - **2026-08-30** — New Web Mentions page (brand sentiment monitoring via DataForSEO Content Analysis API). New "Trend over time" mode on AI Visibility (month-by-month mentions/volume via `llm_mentions/historical`). App-wide audit: added the first automated test suite (`npm test`, Vitest), fixed AI Optimization page missing caching/dedupe (was re-billing on every refresh), `db.ts` migrations swallowing real errors (not just "column already exists"), migrated ~40 pages onto a new shared `callDataForSeo()` API helper (uniform auth/error handling, catching a few real bugs along the way: SERP Checker and Domain Intersection silently swallowing API errors, Reddit and Content Parsing with no `try/catch` around their fetch), and closed the remaining dark mode gaps across ~30 files (Local Finder, Google Reviews, Keyword Data/Difficulty/Overview, Related/Ranked Keywords, Domain Intersection, Competitors, Rank Tracker, Backlinks, Reddit, OnPage, SERP Checker, AI Optimization) — every dashboard page is now fully dark-mode aware.
 - **2026-08-09** — New Query Fan-Out page (hidden AI sub-queries + their search volume). New AI Visibility page (LLM mention tracking). Sortable tables + "Copy as Markdown" across ~30 pages. Fixed location targeting on Labs pages, Domain Categories names, Bulk Backlinks columns, repeated billing on double-submits app-wide, and blank "Related queries" pills on AI Optimization.
 - **2026-07-25** — Geo-Grid competitive analysis (top competitors, visibility-by-distance) and several Geo-Grid reliability/cost-tracking fixes.

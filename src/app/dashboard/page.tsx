@@ -6,7 +6,7 @@ import Link from 'next/link';
 import {
   Activity, TrendingUp, BarChart2, Users, GitMerge, Clock, Lightbulb, Flame,
   Cpu, ShieldCheck, Link2, FolderKanban, Anchor, Globe, MapPin, BrainCircuit,
-  Star, MessageSquare, Search, Gauge, FileSearch2, Grid3X3,
+  Star, Search, Gauge, FileSearch2, Grid3X3,
   Sparkles, Target, Layers, Network, LineChart, Tag,
   History, Copy, BarChart3, BookOpen, Server,
 } from 'lucide-react';
@@ -82,13 +82,6 @@ const sections = [
     color: 'yellow',
     items: [
       { name: 'Google Reviews', href: '/dashboard/google-reviews', icon: Star, desc: 'Google reviews and rating goals' },
-    ],
-  },
-  {
-    label: 'Social Media',
-    color: 'red',
-    items: [
-      { name: 'Reddit', href: '/dashboard/social-media/reddit', icon: MessageSquare, desc: 'Reddit mentions and discussions' },
     ],
   },
   {

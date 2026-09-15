@@ -228,15 +228,6 @@ function initSchema(db: Database.Database) {
       result TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS reddit_searches (
-      id TEXT PRIMARY KEY,
-      ts INTEGER NOT NULL,
-      targets TEXT NOT NULL,
-      result_count INTEGER NOT NULL,
-      cost REAL,
-      items TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS reviews_tasks (
       id TEXT PRIMARY KEY,
       ts INTEGER NOT NULL,
@@ -1434,35 +1425,6 @@ export function getInstantPageResult<T>(id: string): T | null {
   const row = getDb().prepare('SELECT result FROM instant_page_searches WHERE id = ?').get(id) as { result: string } | undefined;
   if (!row) return null;
   try { return JSON.parse(row.result) as T; } catch { return null; }
-}
-
-// --- Reddit ---
-
-export interface RedditSearchEntry {
-  id: string;
-  ts: number;
-  targets: string;
-  count: number;
-  cost?: number;
-}
-
-export function getRedditHistory(): RedditSearchEntry[] {
-  const rows = getDb()
-    .prepare('SELECT id, ts, targets, result_count, cost FROM reddit_searches ORDER BY ts DESC LIMIT 30')
-    .all() as Array<{ id: string; ts: number; targets: string; result_count: number; cost: number | null }>;
-  return rows.map((r) => ({ id: r.id, ts: r.ts, targets: r.targets, count: r.result_count, cost: r.cost ?? undefined }));
-}
-
-export function saveRedditSearch<T>(entry: RedditSearchEntry, items: T[]): void {
-  getDb()
-    .prepare('INSERT OR REPLACE INTO reddit_searches (id, ts, targets, result_count, cost, items) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(entry.id, entry.ts, entry.targets, entry.count, entry.cost ?? null, JSON.stringify(items));
-}
-
-export function getRedditResults<T>(id: string): T[] | null {
-  const row = getDb().prepare('SELECT items FROM reddit_searches WHERE id = ?').get(id) as { items: string } | undefined;
-  if (!row) return null;
-  try { return JSON.parse(row.items) as T[]; } catch { return null; }
 }
 
 // --- Top Searches ---

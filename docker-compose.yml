@@ -1,6 +1,10 @@
 services:
   app:
     build: .
+    # Run as the host user so the ./data bind mount (owned by that user) stays writable on native
+    # Linux, where uids aren't remapped. Defaults to 1000, the first user on most distros; override
+    # with HOST_UID=$(id -u) HOST_GID=$(id -g) docker compose up. No effect on Docker Desktop.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     ports:
       - "3000:3000"
     volumes:

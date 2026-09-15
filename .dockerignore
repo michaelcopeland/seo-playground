@@ -6,4 +6,5 @@ node_modules
 *.db-wal
 .env*
 .wrangler
-data/
+data/*
+!data/*.csv

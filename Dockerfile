@@ -35,6 +35,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 # Public folder (if any)
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
+# DataForSEO locations/categories CSVs, seeded into the DB on first run (read from ./data)
+COPY --from=builder --chown=nextjs:nodejs /app/data ./data
 
 # Persistent data directory (mounted as a volume)
 RUN mkdir -p /data && chown nextjs:nodejs /data

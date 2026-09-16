@@ -81,6 +81,46 @@ function buildPopupHtml(point: GridPoint, target: string, highlightKey?: string)
     </div>`;
 }
 
+/**
+ * Bulky 5-point star in a 100×100 viewBox. The inner radius is fatter than a classic star
+ * (0.52 vs 0.38) and the stroke uses round joins to soften the tips — clip-path can't round
+ * polygon corners, hence SVG.
+ */
+const STAR_PATH = (() => {
+  const cx = 50, cy = 53, outer = 44, inner = 23;
+  const pts = Array.from({ length: 10 }, (_, i) => {
+    const r = i % 2 === 0 ? outer : inner;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    return `${(cx + r * Math.cos(a)).toFixed(2)},${(cy + r * Math.sin(a)).toFixed(2)}`;
+  });
+  return `M${pts.join('L')}Z`;
+})();
+
+function starMarkerHtml(size: number, fontSize: number, color: string, label: string, isCenter: boolean): string {
+  // The center point loses its dashed border as a star, so a white halo keeps the "grid center" cue.
+  const halo = isCenter
+    ? `<path d="${STAR_PATH}" fill="white" stroke="white" stroke-width="20" stroke-linejoin="round"/>`
+    : '';
+  return `
+    <div style="
+      position:relative;width:${size}px;height:${size}px;
+      cursor:pointer;transition:transform 0.1s;
+      filter:drop-shadow(0 2px 4px rgba(0,0,0,0.35));
+    " onmouseenter="this.style.transform='scale(1.12)'" onmouseleave="this.style.transform='scale(1)'">
+      <!-- z-index:0 overrides Leaflet's ".leaflet-map-pane svg { z-index: 200 }", which would hide the label -->
+      <svg viewBox="0 0 100 100" width="${size}" height="${size}" style="position:absolute;inset:0;z-index:0;overflow:visible">
+        ${halo}
+        <path d="${STAR_PATH}" fill="${color}" stroke="${color}" stroke-width="8" stroke-linejoin="round"/>
+      </svg>
+      <div style="
+        position:absolute;inset:0;z-index:1;padding-top:${Math.round(size * 0.06)}px;
+        display:flex;align-items:center;justify-content:center;
+        font-size:${fontSize}px;font-weight:900;color:white;
+        font-family:system-ui,sans-serif;
+      ">${label}</div>
+    </div>`;
+}
+
 /** Resolves the rank to display at a point, given whether a competitor is being highlighted. */
 function pointRank(point: GridPoint, highlightKey?: string): number | null {
   if (!highlightKey) return point.rank;
@@ -140,7 +180,11 @@ export default function GridMap({ points, gridSize, target, highlightKey, highli
 
         const shadow = `box-shadow: 0 2px 8px rgba(0,0,0,0.35);`;
 
-        const html = `
+        // #1 is an oversized star so it stands out against the square markers around it.
+        const markerPx = rank === 1 ? Math.round(cellPx * 1.3) : cellPx;
+        const html = rank === 1
+          ? starMarkerHtml(markerPx, fontSize, color, label, isCenter)
+          : `
           <div style="
             width:${cellPx}px;height:${cellPx}px;
             background:${color};
@@ -158,8 +202,8 @@ export default function GridMap({ points, gridSize, target, highlightKey, highli
         const icon = L.divIcon({
           html,
           className: '',
-          iconSize: [cellPx, cellPx],
-          iconAnchor: [cellPx / 2, cellPx / 2],
+          iconSize: [markerPx, markerPx],
+          iconAnchor: [markerPx / 2, markerPx / 2],
         });
 
         const marker = L.marker([point.lat!, point.lng!], { icon }).addTo(map);

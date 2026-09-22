@@ -80,35 +80,43 @@ export default async function RankTrackerPage({ searchParams }: { searchParams: 
             {allKeywords.length} keyword{allKeywords.length !== 1 ? 's' : ''} across {domains.length} domain{domains.length !== 1 ? 's' : ''}
           </p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <form action={saveDepthAction} className="flex items-center gap-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Top</label>
-            <select
-              name="rank_tracker_depth"
-              defaultValue={rankDepth}
-              className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none"
-            >
-              {['10', '20', '50', '100'].map((v) => (
-                <option key={v} value={v}>{v}</option>
-              ))}
-            </select>
-            <button type="submit" className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
-              Save
-            </button>
-          </form>
-
-          {allKeywords.length > 0 && creds && (
-            <form action={checkAllAction}>
-              <input type="hidden" name="domain" value={activeDomain ?? ''} />
-              <PendingButton
-                type="submit"
-                className="px-5 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
-                pendingClassName="px-5 py-3 bg-slate-400 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-xl shadow-slate-200 dark:shadow-none cursor-not-allowed"
-                pendingChildren={`Checking ${allKeywords.length}…`}
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <div className="flex items-center gap-3">
+            <form action={saveDepthAction} className="flex items-center gap-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Top</label>
+              <select
+                name="rank_tracker_depth"
+                defaultValue={rankDepth}
+                className="px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-300 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none"
               >
-                Check All ({allKeywords.length})
-              </PendingButton>
+                {['10', '20', '50', '100'].map((v) => (
+                  <option key={v} value={v}>{v}</option>
+                ))}
+              </select>
+              <button type="submit" className="px-3 py-2 text-[9px] font-black uppercase tracking-widest rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all">
+                Save
+              </button>
             </form>
+
+            {allKeywords.length > 0 && creds && (
+              <form action={checkAllAction}>
+                <input type="hidden" name="domain" value={activeDomain ?? ''} />
+                <PendingButton
+                  type="submit"
+                  title={`Re-checks all ${allKeywords.length} tracked keywords — bills DataForSEO for each one, every time`}
+                  className="px-5 py-3 bg-slate-900 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-slate-700 transition-all shadow-xl shadow-slate-200 dark:shadow-none"
+                  pendingClassName="px-5 py-3 bg-slate-400 text-white text-[10px] font-black uppercase tracking-widest rounded-xl shadow-xl shadow-slate-200 dark:shadow-none cursor-not-allowed"
+                  pendingChildren={`Checking ${allKeywords.length}…`}
+                >
+                  Check All ({allKeywords.length})
+                </PendingButton>
+              </form>
+            )}
+          </div>
+          {allKeywords.length > 0 && creds && (
+            <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium">
+              Bills DataForSEO for all {allKeywords.length} keyword{allKeywords.length !== 1 ? 's' : ''} every time
+            </span>
           )}
         </div>
       </div>
@@ -204,17 +212,21 @@ export default async function RankTrackerPage({ searchParams }: { searchParams: 
                     <span className="text-[10px] text-slate-300 dark:text-slate-600 hidden sm:block">Click a row to see history</span>
                     <CopyMarkdownButton data={csvData} columns={csvColumns} />
                     {creds && (
-                      <form action={checkDomainAction}>
-                        <input type="hidden" name="domain" value={activeDomain} />
-                        <PendingButton
-                          type="submit"
-                          className="px-3 py-1.5 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100"
-                          pendingClassName="px-3 py-1.5 bg-blue-300 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-not-allowed"
-                          pendingChildren={`Checking ${rows.length}…`}
-                        >
-                          Check {rows.length}
-                        </PendingButton>
-                      </form>
+                      <>
+                        <span className="text-[9px] text-slate-300 dark:text-slate-600 hidden md:block">Bills DataForSEO for all {rows.length}</span>
+                        <form action={checkDomainAction}>
+                          <input type="hidden" name="domain" value={activeDomain} />
+                          <PendingButton
+                            type="submit"
+                            title={`Re-checks all ${rows.length} keywords for ${activeDomain} — bills DataForSEO for each one, every time`}
+                            className="px-3 py-1.5 bg-blue-600 text-white text-[9px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-blue-100"
+                            pendingClassName="px-3 py-1.5 bg-blue-300 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-not-allowed"
+                            pendingChildren={`Checking ${rows.length}…`}
+                          >
+                            Check {rows.length}
+                          </PendingButton>
+                        </form>
+                      </>
                     )}
                   </div>
                 </div>

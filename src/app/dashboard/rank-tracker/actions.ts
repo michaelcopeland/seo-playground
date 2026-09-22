@@ -19,6 +19,7 @@ interface SerpItem {
 interface SerpResponse {
   tasks?: Array<{
     status_code?: number;
+    status_message?: string;
     cost?: number;
     result?: Array<{ items?: SerpItem[] }>;
   }>;
@@ -29,8 +30,10 @@ function cleanDomain(d: string) {
 }
 
 /**
- * Sends all keywords in one batch request to DataForSEO instead of N sequential
- * requests. Reduces "Check All" from N×3s to ~3s regardless of keyword count.
+ * Checks each keyword against DataForSEO's `live` (synchronous) SERP endpoint, one task per
+ * request. The live endpoint accepts an array of tasks but executes only index 0 and returns
+ * `40000 You can set only one task at a time` for the rest, so batching silently dropped every
+ * keyword after the first. Failures are logged instead of being treated as "not ranking".
  */
 async function checkKeywordsBatch(
   keywords: Array<{ id: number; keyword: string; domain: string; location: string; language: string }>,
@@ -40,53 +43,51 @@ async function checkKeywordsBatch(
 
   const depth = parseInt(getSetting('rank_tracker_depth') ?? '100', 10);
   const auth = btoa(`${creds.login}:${creds.pass}`);
-  const BATCH = 100; // DataForSEO max tasks per request
 
-  for (let offset = 0; offset < keywords.length; offset += BATCH) {
-    const batch = keywords.slice(offset, offset + BATCH);
-
+  for (const kw of keywords) {
     let res: Response;
     try {
       res = await fetch('https://api.dataforseo.com/v3/serp/google/organic/live/regular', {
         method: 'POST',
         headers: { Authorization: `Basic ${auth}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          batch.map((kw) => ({
-            keyword: kw.keyword,
-            location_name: kw.location,
-            language_name: kw.language,
-            depth,
-          })),
-        ),
+        body: JSON.stringify([{
+          keyword: kw.keyword,
+          location_name: kw.location,
+          language_name: kw.language,
+          depth,
+        }]),
         signal: AbortSignal.timeout(60_000),
       });
-    } catch {
+    } catch (err) {
+      console.error(`[rank-tracker] SERP request failed for "${kw.keyword}" (${kw.domain}):`, err);
       continue;
     }
-    if (!res.ok) continue;
+    if (!res.ok) {
+      console.error(`[rank-tracker] SERP request for "${kw.keyword}" (${kw.domain}) returned HTTP ${res.status} ${res.statusText}`);
+      continue;
+    }
 
     const data = await res.json() as SerpResponse;
+    const task = data.tasks?.[0];
 
-    for (let i = 0; i < batch.length; i++) {
-      const kw = batch[i];
-      const task = data.tasks?.[i];
-
-      // Skip saving if the task itself returned an API-level error (preserves existing data)
-      if (task?.status_code !== 20000) continue;
-
-      const items = task?.result?.[0]?.items ?? [];
-      const cost = task?.cost ?? null;
-
-      // Split by '/' so a tracked domain like "example.com/page" still matches
-      const domain = cleanDomain(kw.domain).split('/')[0];
-      const hit = items.find((item) => {
-        if (item.type !== 'organic') return false;
-        const d = cleanDomain(item.domain ?? item.url ?? '').split('/')[0];
-        return d === domain || d.endsWith('.' + domain);
-      });
-
-      saveRankCheck(kw.id, hit?.rank_absolute ?? null, hit?.url ?? null, hit?.title ?? null, cost);
+    // Skip saving if the task itself returned an API-level error (preserves existing data)
+    if (task?.status_code !== 20000) {
+      console.error(`[rank-tracker] SERP check failed for "${kw.keyword}" (${kw.domain}): ${task?.status_code ?? 'no task'} ${task?.status_message ?? ''}`);
+      continue;
     }
+
+    const items = task?.result?.[0]?.items ?? [];
+    const cost = task?.cost ?? null;
+
+    // Split by '/' so a tracked domain like "example.com/page" still matches
+    const domain = cleanDomain(kw.domain).split('/')[0];
+    const hit = items.find((item) => {
+      if (item.type !== 'organic') return false;
+      const d = cleanDomain(item.domain ?? item.url ?? '').split('/')[0];
+      return d === domain || d.endsWith('.' + domain);
+    });
+
+    saveRankCheck(kw.id, hit?.rank_absolute ?? null, hit?.url ?? null, hit?.title ?? null, cost);
   }
 }
 

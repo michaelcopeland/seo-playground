@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "seo-playground": {
+      "command": "npx",
+      "args": ["tsx", "mcp-server/index.ts"],
+      "env": {
+        "DB_PATH": "./data/seo-playground.db"
+      }
+    }
+  }
+}
